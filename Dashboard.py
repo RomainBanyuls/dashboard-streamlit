@@ -7,15 +7,20 @@ import gdown
 # 🚀 Configuration de la page
 st.set_page_config(page_title="Dashboard Transport", layout="wide")
 
-# 📌 Téléchargement des données depuis Google Drive
+# 📌 Téléchargement des données compressées depuis Google Drive
 @st.cache_data
 def load_data():
-    url = "https://drive.google.com/uc?id=1Qk8TQ_YXNv_e54v_0C52yz5rQCBTEtve"
-    output = "df_geo_v1.pkl"
+    url = "https://drive.google.com/uc?id=1nfqGFPyIV4TfuKNuZGdbJNCJ3q8-XZlO"
+    output = "df_retard_v2.csv.gz"
     gdown.download(url, output, quiet=False)
-    df = pd.read_pickle(output)
+    
+    # Charger le CSV compressé
+    df = pd.read_csv(output, compression="gzip")
+    
+    # Convertir les dates
     date_cols = ["DATE_OT", "DATE_DEPART", "DATE_ARRIVEE", "DATE_DERNIER_EVNT"]
     df[date_cols] = df[date_cols].apply(pd.to_datetime)
+    
     return df
 
 df = load_data()
