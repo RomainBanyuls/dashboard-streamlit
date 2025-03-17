@@ -11,7 +11,7 @@ st.set_page_config(page_title="Dashboard Transport", layout="wide")
 @st.cache_data
 def load_data():
     url = "https://drive.google.com/uc?id=1nfqGFPyIV4TfuKNuZGdbJNCJ3q8-XZlO"
-    output = "df_retard_v2.csv.gz"
+    output = "df_geo_v2.csv.gz"
     gdown.download(url, output, quiet=False)
     
     # Charger le CSV compressé
