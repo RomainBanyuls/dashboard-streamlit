@@ -2,25 +2,14 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import gdown
 
 # 🚀 Configuration de la page
 st.set_page_config(page_title="Dashboard Transport", layout="wide")
 
-# 📌 Téléchargement des données compressées depuis Google Drive
+# 📌 Chargement des données depuis le fichier Parquet stocké sur GitHub
 @st.cache_data
 def load_data():
-    url = "https://drive.google.com/uc?id=1nfqGFPyIV4TfuKNuZGdbJNCJ3q8-XZlO"
-    output = "df_geo_v2.csv.gz"
-    gdown.download(url, output, quiet=False)
-    
-    # Charger le CSV compressé
-    df = pd.read_csv(output, compression="gzip")
-    
-    # Convertir les dates
-    date_cols = ["DATE_OT", "DATE_DEPART", "DATE_ARRIVEE", "DATE_DERNIER_EVNT"]
-    df[date_cols] = df[date_cols].apply(pd.to_datetime)
-    
+    df = pd.read_parquet("df_geo_v2.parquet")  # Lecture directe depuis GitHub
     return df
 
 df = load_data()
