@@ -9,21 +9,44 @@ st.set_page_config(page_title="Dashboard Transport", layout="wide")
 # 📌 Chargement des données depuis le fichier Parquet stocké sur GitHub
 @st.cache_data
 def load_data():
-    df = pd.read_parquet("df_geo_v2.parquet")  # Lecture directe depuis GitHub
-    return df
+    try:
+        df = pd.read_parquet("df_geo_v2.parquet")  # Lecture directe depuis GitHub
+        
+        # Vérifier et convertir les dates si nécessaire
+        date_cols = ["DATE_OT", "DATE_DEPART", "DATE_ARRIVEE", "DATE_DERNIER_EVNT"]
+        for col in date_cols:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+        
+        return df
+    except Exception as e:
+        st.error(f"❌ Erreur lors du chargement des données : {e}")
+        return pd.DataFrame()
 
 df = load_data()
 
+# Vérifier si le dataset est bien chargé
+if df.empty:
+    st.warning("⚠️ Les données n'ont pas pu être chargées. Vérifiez que le fichier `df_geo_v2.parquet` est bien dans le repo GitHub.")
+    st.stop()
+
 # 📌 Sidebar - Filtres
 st.sidebar.header("Filtres")
-date_debut, date_fin = st.sidebar.date_input("Sélectionne une période", [df["DATE_DEPART"].min(), df["DATE_DEPART"].max()])
-agence_enl = st.sidebar.multiselect("Agence d'Enlèvement", sorted(df["AGENCE_ENL"].unique()))
-agence_liv = st.sidebar.multiselect("Agence de Livraison", sorted(df["AGENCE_LIV"].unique()))
-produit = st.sidebar.multiselect("Produit", df["PRODUIT"].unique())
-priorite = st.sidebar.multiselect("Priorité", df["PRIORITE"].unique())
+date_debut, date_fin = st.sidebar.date_input(
+    "Sélectionne une période", 
+    [df["DATE_DEPART"].min(), df["DATE_DEPART"].max()]
+)
+
+agence_enl = st.sidebar.multiselect("Agence d'Enlèvement", sorted(df["AGENCE_ENL"].dropna().unique()))
+agence_liv = st.sidebar.multiselect("Agence de Livraison", sorted(df["AGENCE_LIV"].dropna().unique()))
+produit = st.sidebar.multiselect("Produit", df["PRODUIT"].dropna().unique())
+priorite = st.sidebar.multiselect("Priorité", df["PRIORITE"].dropna().unique())
 
 # 📌 Application des filtres
-df_filtered = df[(df["DATE_DEPART"] >= pd.to_datetime(date_debut)) & (df["DATE_DEPART"] <= pd.to_datetime(date_fin))]
+df_filtered = df[
+    (df["DATE_DEPART"] >= pd.to_datetime(date_debut)) & 
+    (df["DATE_DEPART"] <= pd.to_datetime(date_fin))
+]
+
 if agence_enl:
     df_filtered = df_filtered[df_filtered["AGENCE_ENL"].isin(agence_enl)]
 if agence_liv:
@@ -32,6 +55,11 @@ if produit:
     df_filtered = df_filtered[df_filtered["PRODUIT"].isin(produit)]
 if priorite:
     df_filtered = df_filtered[df_filtered["PRIORITE"].isin(priorite)]
+
+# Vérifier si le DataFrame est vide
+if df_filtered.empty:
+    st.warning("⚠️ Aucun résultat trouvé pour ces filtres.")
+    st.stop()
 
 # 📊 Scorecards avec encadrement et suppression des millisecondes
 def format_timedelta(td):
