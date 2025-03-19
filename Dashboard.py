@@ -2,18 +2,18 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-
+import os
 # 🚀 Configuration de la page
 st.set_page_config(page_title="Dashboard Transport", layout="wide")
 
-# 📌 Chargement des données depuis le fichier Parquet stocké sur GitHub
+# 📌 Chargement des données depuis le fichier Parquet stocké sur Hugging Face
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_parquet("df_geo_v2.parquet")  # Lecture directe depuis GitHub
+        df = pd.read_parquet("df_geo_v2.parquet")  # Chargement du fichier localement
         
         # Vérifier et convertir les dates si nécessaire
-        date_cols = ["DATE_OT", "DATE_DEPART", "DATE_ARRIVEE", "DATE_DERNIER_EVNT"]
+        date_cols = ["DATE_OT", "DATE_DEPART", "DATE_ARRIVEE", "DLL", "DATE_DERNIER_EVNT"]
         for col in date_cols:
             df[col] = pd.to_datetime(df[col], errors='coerce')
         
@@ -26,25 +26,31 @@ df = load_data()
 
 # Vérifier si le dataset est bien chargé
 if df.empty:
-    st.warning("⚠️ Les données n'ont pas pu être chargées. Vérifiez que le fichier `df_geo_v2.parquet` est bien dans le repo GitHub.")
+    st.warning("⚠️ Les données n'ont pas pu être chargées. Vérifiez que le fichier `df_geo_v2.parquet` est bien dans Hugging Face Spaces.")
     st.stop()
 
 # 📌 Sidebar - Filtres
 st.sidebar.header("Filtres")
 date_debut, date_fin = st.sidebar.date_input(
     "Sélectionne une période", 
-    [df["DATE_DEPART"].min(), df["DATE_DEPART"].max()]
+    [df["DATE_DERNIER_EVNT"].min(), df["DATE_DERNIER_EVNT"].max()]
 )
 
 agence_enl = st.sidebar.multiselect("Agence d'Enlèvement", sorted(df["AGENCE_ENL"].dropna().unique()))
 agence_liv = st.sidebar.multiselect("Agence de Livraison", sorted(df["AGENCE_LIV"].dropna().unique()))
 produit = st.sidebar.multiselect("Produit", df["PRODUIT"].dropna().unique())
 priorite = st.sidebar.multiselect("Priorité", df["PRIORITE"].dropna().unique())
+pays_enl = st.sidebar.multiselect("Pays d'enlèvement", df["PAYS_ENL"].dropna().unique())
+pays_liv = st.sidebar.multiselect("Pays de livraison", df["PAYS_LIV"].dropna().unique())
+region_enl = st.sidebar.multiselect("Region d'enlèvement", df["REGION_ENL"].dropna().unique())
+region_liv = st.sidebar.multiselect("Region de livraison", df["REGION_LIV"].dropna().unique())
+dpt_enl = st.sidebar.multiselect("Département d'enlèvement", sorted(df["DPT_ENL"].dropna().unique()))
+dpt_liv = st.sidebar.multiselect("Département de livraison", sorted(df["DPT_LIV"].dropna().unique()))
 
 # 📌 Application des filtres
 df_filtered = df[
-    (df["DATE_DEPART"] >= pd.to_datetime(date_debut)) & 
-    (df["DATE_DEPART"] <= pd.to_datetime(date_fin))
+    (df["DATE_DERNIER_EVNT"] >= pd.to_datetime(date_debut)) & 
+    (df["DATE_DERNIER_EVNT"] <= pd.to_datetime(date_fin))
 ]
 
 if agence_enl:
@@ -55,6 +61,18 @@ if produit:
     df_filtered = df_filtered[df_filtered["PRODUIT"].isin(produit)]
 if priorite:
     df_filtered = df_filtered[df_filtered["PRIORITE"].isin(priorite)]
+if pays_enl:
+    df_filtered = df_filtered[df_filtered["PAYS_ENL"].isin(pays_enl)]
+if pays_liv:
+    df_filtered = df_filtered[df_filtered["PAYS_LIV"].isin(pays_liv)]
+if region_enl:
+    df_filtered = df_filtered[df_filtered["REGION_ENL"].isin(region_enl)]
+if region_liv:
+    df_filtered = df_filtered[df_filtered["REGION_LIV"].isin(region_liv)]
+if dpt_enl:
+    df_filtered = df_filtered[df_filtered["DPT_ENL"].isin(dpt_enl)]
+if dpt_liv:
+    df_filtered = df_filtered[df_filtered["DPT_LIV"].isin(dpt_liv)]
 
 # Vérifier si le DataFrame est vide
 if df_filtered.empty:
@@ -72,15 +90,32 @@ with col1:
 with col2:
     st.metric("Nombre de Colis", f"{df_filtered['NB_COLIS'].sum():,}")
 with col3:
-    st.metric("Temps moyen DL_H", format_timedelta(df_filtered['DL_H'].mean()))
+    st.metric("Délai de livraison moyen", format_timedelta(df_filtered['DL_H'].mean()))
 
 col4, col5, col6 = st.columns(3)
 with col4:
-    st.metric("Temps moyen DT_H", format_timedelta(df_filtered['DT_H'].mean()))
+    st.metric("Délai de traitement moyen", format_timedelta(df_filtered['DT_H'].mean()))
 with col5:
-    st.metric("Temps moyen DDK_H", format_timedelta(df_filtered['DDK_H'].mean()))
+    st.metric("Délai dernier km moyen", format_timedelta(df_filtered['DDK_H'].mean()))
 with col6:
     st.metric("Temps Retard Moyen", format_timedelta(df_filtered.loc[df_filtered['DELAIS_RETARD'] > pd.Timedelta(0), 'DELAIS_RETARD'].mean()))
+
+col7, col8, col9 = st.columns(3)
+with col7:
+    st.metric("Nombre d'OT livré à temps", f"{df_filtered['DELAIS_A_TPS'].gt(pd.Timedelta(0)).sum():,}")
+with col8:
+    ot_avant_13h = df_filtered[(df_filtered['DELAIS_A_TPS'].gt(pd.Timedelta(0))) & 
+                               (df_filtered['LIV_AVANT_13H'] == 1)].shape[0]
+    total_ot = df_filtered['RETARD'].count()
+    
+    if total_ot > 0:  # Vérification pour éviter la division par zéro
+        pourcentage = round((ot_avant_13h / total_ot) * 100, 2)
+    else:
+        pourcentage = 0  # Ou une autre valeur par défaut
+
+    st.metric("OT livré à temps avant 13h", f"{pourcentage}%")
+with col9:
+    st.metric("Nombre d'OT en retard", f"{df_filtered['DELAIS_RETARD'].gt(pd.Timedelta(0)).sum():,}")
 
 # 📈 Indicateur cible + Gauge chart
 st.subheader("🎯 Objectif de livraison à temps")
@@ -138,5 +173,6 @@ fig.update_layout(
     template="plotly_white"
 )
 st.plotly_chart(fig, use_container_width=True)
+
 
 st.success("Dashboard prêt ! 🚀")
